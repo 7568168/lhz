@@ -36,7 +36,7 @@
 #返回SMTP服务器的IP
 :local SMTPIP [:resolve $SMTPServer]
 #Email设置
-/tool e-mail set address=$SMTPIP port=$SMTPPort from=$Sender user=$Sender password=“去掉双引号，有一个值需要填写”
+/tool e-mail set address=$SMTPIP port=$SMTPPort from=$Sender user=$Sender password=“去掉双引号，输入你在邮箱中开启POP3/SMTP服务时弹出来的密钥”
 
 #域名映射开始：：DNSPOD token，从dnspod获取需要ID和一个长串的东西
 :local token "ID,TOKEN"
