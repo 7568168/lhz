@@ -1,0 +1,76 @@
+/system clock set time-zone-name=Asia/Shanghai
+:global ntpipnewp ([:resolve ntp.aliyun.com]) 
+/system ntp client set primary-ntp=$ntpipnewp
+:global ntpipnews ([:resolve time1.cloud.tencent.com]) 
+/system ntp client set secondary-ntp=$ntpipnews
+
+#PPPoE
+:local pppoe "pppoe-out1"
+#获取pppoe拨号ip
+:local ipaddr [/ip address get [/ip address find interface=$pppoe] address]
+:set ipaddr [:pick $ipaddr 0 ([len $ipaddr] -3)]
+
+#设定日期格式
+:local date [/system clock get date]
+:local day [:pick $date 4 6]
+:local month [:pick $date 0 3]
+:local year [:pick $date 7 11]
+:local convert ([:find jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec [:pick $date 0 3]]+1);
+:if ($convert <=9) do={
+:set convert ("0".$convert)
+}
+:set date ($year."年".$convert."月".$day."日");
+
+#邮件配置开始：：SMTP服务器
+:local SMTPServer "smtp.qq.com"
+#SMTP端口
+:local SMTPPort "587"
+#发件人账号
+:local Sender "@qq.com"
+#发件人密码
+:local pwd ""
+#收件人账号
+:local SendEmailTo "@qq.com"
+#发送Email的主题
+:local Themes "IP变化（$ipaddr）"
+#返回SMTP服务器的IP
+:local SMTPIP [:resolve $SMTPServer]
+#Email设置
+/tool e-mail set address=$SMTPIP port=$SMTPPort from=$Sender user=$Sender password=“去掉双引号，有一个值需要填写”
+
+#域名映射开始：：DNSPOD token，从dnspod获取需要ID和一个长串的东西
+:local token "ID,TOKEN"
+#域名
+:local dname "自定义.com"
+#主机记录
+:local sub "@"
+#记录类型
+:local retyp "A"
+#获取 dnspod 数据
+:local redd [/tool fetch url="https://dnsapi.cn/Record.List" http-data="login_token=$token&format=json&domain=$dname&sub_domain=$sub&record_type=$retyp" as-value output=user]
+#赋值所有数据
+:set redd ($redd->"data")
+#查找records数组并赋值
+:set redd [:pick $redd [:find $redd "\"records\":"] [:len $redd]]
+#ID和IP查询赋值
+:local reddid [:pick $redd ([:find $redd "\"id\":\""]+6) [:find $redd "\",\"ttl"]]
+:local reddip [:pick $redd ([:find $redd "\"value\":\""]+9) [:find $redd "\",\"en"]]
+
+# 邮件内容提前处理
+:local Contents "邮件发送时的公网IP：$ipaddr \n更新前IP：$reddip \n发送时间：$date"
+#ROS版本获取
+:local systeminfo ("您的路由器版本：MikroTik v" . [/system package get system version] )
+
+
+#判断更新 dnspod ip地址，云端ip与本地ip不同，才执行更新代码
+:if ($reddip!=$ipaddr) do={
+/tool fetch url="https://dnsapi.cn/Record.Ddns" http-data="login_token=$token&format=json&domain=$dname&sub_domain=$sub&record_id=$reddid&record_line_id=0&value=$ipaddr"
+#发送Email
+/tool e-mail send to=$SendEmailTo from=$Sender subject=("$Themes") body=("$systeminfo \n$Contents")
+#日志提醒
+:log warning "($reddip)ip已更新:$Themes,已发邮件至($SendEmailTo)"
+} else={
+:log warning "不用更新:IP未变($ipaddr),未发邮件至($SendEmailTo)"
+# :log warning "record-data（$redd）"
+}
+
